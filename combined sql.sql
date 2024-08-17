@@ -5,7 +5,7 @@
 CREATE USER assignment IDENTIFIED BY 1234;
 
 GRANT CONNECT TO assignment;
-GRANT CREATE SESSION, CREATE TABLE, UNLIMITED TABLESPACE TO assignment;
+GRANT CREATE SESSION, CREATE TABLE,CREATE TRIGGER, CREATE PROCEDURE, UNLIMITED TABLESPACE TO assignment;
 
 
 -- Step 1: Drop Existing Tables
@@ -486,15 +486,6 @@ BEGIN
     );
 END;
 / 
-
--- DISPLAY DATA --
-
-SELECT * FROM Department_info;
-SELECT * FROM Employee_info;
-SELECT * FROM Student_counseling;
-SELECT * FROM Student_performance;
-/
-
 
 
 
@@ -1590,36 +1581,32 @@ END;
 /
 
 
--- DEPARTMENT GROWTH OVER TIME WITH YEARLY BREAKDOWN
-SET SERVEROUTPUT ON SIZE UNLIMITED;
+-- DEPARTMENT GROWTH OVER TIME
+SELECT d.Department_ID,
+       TO_CHAR(e.DOJ, 'YYYY') AS Year,
+       COUNT(e.Employee_ID) AS Employee_Count,
+       COUNT(sc.Student_ID) AS Student_Count
+FROM Department_info d
+LEFT JOIN Employee_info e 
+    ON d.Department_ID = e.Department_ID  
+LEFT JOIN Student_counseling sc 
+    ON d.Department_ID = sc.Department_Choices  
+GROUP BY d.Department_ID, TO_CHAR(e.DOJ, 'YYYY')
+ORDER BY d.Department_ID, Year;
 
-CREATE OR REPLACE PROCEDURE department_growth_over_time IS
-BEGIN
-    FOR rec IN (
-        SELECT d.Department_ID,
-               TO_CHAR(e.DOJ, 'YYYY') AS Year,
-               COUNT(e.Employee_ID) AS Employee_Count,
-               COUNT(sc.Student_ID) AS Student_Count
-        FROM Department_info d
-        LEFT JOIN Employee_info e ON d.Department_ID = e.Department_ID
-            AND e.DOJ IS NOT NULL
-        LEFT JOIN Student_counseling sc ON d.Department_ID = sc.Department_Choices
-            AND sc.DOA IS NOT NULL
-        GROUP BY d.Department_ID, TO_CHAR(e.DOJ, 'YYYY')
-        ORDER BY d.Department_ID, Year
-    ) LOOP
-        DBMS_OUTPUT.PUT_LINE('Department ID: ' || rec.Department_ID || 
-                             ' - Year: ' || rec.Year || 
-                             ' - Number of Employees: ' || rec.Employee_Count || 
-                             ', Number of Students: ' || rec.Student_Count);
-    END LOOP;
-END;
-/
 
-BEGIN
-    department_growth_over_time;
-END;
-/
+--STUDENT_COUNSELING_NEEDS_BY_DEPARTMENT
+SELECT 
+    d.Department_Name AS "Department Name",
+    COUNT(sc.Student_ID) AS "Number of Students"
+FROM 
+    Student_counseling sc
+JOIN 
+    Department_info d ON sc.Department_Admission = d.Department_ID
+GROUP BY 
+    d.Department_Name
+ORDER BY 
+    "Number of Students" DESC;
 
 
 -- EMP_TENURE
@@ -1760,29 +1747,6 @@ BEGIN
     );
 END;
 /
-
-
--- STUDENT COUNSELING PREFERENCES
-SET SERVEROUTPUT ON SIZE UNLIMITED;
-
-CREATE OR REPLACE PROCEDURE student_department_preferences IS
-BEGIN
-    FOR rec IN (
-        SELECT Department_Choices, COUNT(*) AS Choice_Count
-        FROM Student_counseling
-        GROUP BY Department_Choices
-        ORDER BY Choice_Count DESC
-    ) LOOP
-        DBMS_OUTPUT.PUT_LINE('Department Choices: ' || rec.Department_Choices || ' - Number of Students: ' || rec.Choice_Count);
-    END LOOP;
-END;
-/
-
-BEGIN
-    student_department_preferences;
-END;
-/
-
 
 -- TOP10_DEPARTMENTAL
 SET SERVEROUTPUT ON SIZE UNLIMITED;
