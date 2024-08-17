@@ -1,3 +1,4 @@
+-- CREATE PART WITH TRIGGER
 -- INSERT DATA INTO DEPARTMENT INFO WITH TRANSACTION MANAGEMENT --
 
 CREATE OR REPLACE PROCEDURE insert_department_info (
@@ -320,10 +321,3 @@ BEGIN
 END;
 / 
 
--- DISPLAY DATA --
-
-SELECT * FROM Department_info;
-SELECT * FROM Employee_info;
-SELECT * FROM Student_counseling;
-SELECT * FROM Student_performance;
-/
