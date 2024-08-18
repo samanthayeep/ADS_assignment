@@ -172,9 +172,8 @@ CREATE OR REPLACE PROCEDURE insert_department_info (
     p_department_name          IN VARCHAR2,
     p_doe                     IN DATE
 ) IS
-    savepoint_name VARCHAR2(20) := 'sp_insert_department';
 BEGIN
-    SAVEPOINT savepoint_name;
+    SAVEPOINT sp_insert_department;
     INSERT INTO Department_info (
         Department_ID, 
         Department_Name, 
@@ -189,10 +188,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('Department inserted successfully.');
 EXCEPTION
     WHEN DUP_VAL_ON_INDEX THEN
-        ROLLBACK TO savepoint_name;
+        ROLLBACK TO sp_insert_department;
         DBMS_OUTPUT.PUT_LINE('Error: Department_ID already exists.');
     WHEN OTHERS THEN
-        ROLLBACK TO savepoint_name;
+        ROLLBACK TO sp_insert_department;
         DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
 END;
 / 
@@ -246,9 +245,8 @@ CREATE OR REPLACE PROCEDURE insert_employee_info (
     p_doj                     IN DATE,
     p_department_id            IN VARCHAR2
 ) IS
-    savepoint_name VARCHAR2(20) := 'sp_insert_employee';
 BEGIN
-    SAVEPOINT savepoint_name;
+    SAVEPOINT sp_insert_employee;
     INSERT INTO Employee_info (
         Employee_ID, 
         DOB, 
@@ -265,7 +263,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('Employee inserted successfully.');
 EXCEPTION
     WHEN OTHERS THEN
-        ROLLBACK TO savepoint_name;
+        ROLLBACK TO sp_insert_employee;
         DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
 END;
 /
@@ -324,9 +322,8 @@ CREATE OR REPLACE PROCEDURE insert_student_counseling (
     p_department_choices       IN VARCHAR2,
     p_department_admission     IN VARCHAR2
 ) IS
-    savepoint_name VARCHAR2(40) := 'sp_insert_student_counseling';
 BEGIN
-    SAVEPOINT savepoint_name;
+    SAVEPOINT sp_insert_student_counselin;
     INSERT INTO Student_counseling (
         Student_ID, 
         DOA, 
@@ -345,6 +342,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('Student counseling info inserted successfully.');
 EXCEPTION
     WHEN DUP_VAL_ON_INDEX THEN
+        ROLLBACK TO sp_insert_student_counseling;
         DBMS_OUTPUT.PUT_LINE('Error: Student_ID already exists.');
     WHEN OTHERS THEN
         ROLLBACK TO sp_insert_student_counseling;
@@ -410,9 +408,8 @@ CREATE OR REPLACE PROCEDURE insert_student_performance (
     p_paper_name               IN VARCHAR2,
     p_marks                    IN NUMBER
 ) IS
-    savepoint_name VARCHAR2(40) := 'sp_insert_student_performance';
 BEGIN
-    SAVEPOINT savepoint_name;
+    SAVEPOINT sp_insert_student_performance;
     INSERT INTO Student_performance (
         Student_ID, 
         Semester_Name, 
@@ -431,6 +428,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('Student performance info inserted successfully.');
 EXCEPTION
     WHEN DUP_VAL_ON_INDEX THEN
+    ROLLBACK TO sp_insert_student_performance;
         DBMS_OUTPUT.PUT_LINE('Error: Student_ID, Semester_Name, and Paper_ID combination already exists.');
     WHEN OTHERS THEN
         ROLLBACK TO sp_insert_student_performance;
@@ -1479,174 +1477,57 @@ END;
 
 -- DATA ANALYSIS PART
 
--- CALCULATE EMPLOYEE STUDENT RATIO FOR DEPARTMENT
--- allow user to input department name and get the student to employee ratio for each department
+-- 3.1.1 Find failing students 
+ -- This query allows the user to input the semester name, paper name, and passing marks to find the failing students
 SET SERVEROUTPUT ON SIZE UNLIMITED;
 
-CREATE OR REPLACE PROCEDURE calculate_ratio_for_department (
-    p_department_name IN VARCHAR2 -- User input for Department Name
+CREATE OR REPLACE PROCEDURE find_failing_students (
+    p_semester_name IN VARCHAR2,  
+    p_paper_name IN VARCHAR2,      
+    p_passing_marks IN NUMBER      
 ) AS
-BEGIN
-    -- Output input parameters for debugging
-    DBMS_OUTPUT.PUT_LINE('Input Parameters:');
-    DBMS_OUTPUT.PUT_LINE('Department Name: ' || p_department_name);
-
-    FOR ratio_rec IN (
-        SELECT d.Department_Name,
-               COUNT(e.Employee_ID) AS employee_count,
-               COUNT(sc.Student_ID) AS student_count,
-               CASE 
-                   WHEN COUNT(e.Employee_ID) = 0 THEN 0
-                   ELSE ROUND(COUNT(sc.Student_ID) / COUNT(e.Employee_ID), 2) 
-               END AS emp_student_ratio 
-        FROM Department_info d
-        LEFT JOIN Employee_info e ON d.Department_ID = e.Department_ID
-        LEFT JOIN Student_counseling sc ON d.Department_ID = sc.Department_Admission
-        WHERE (p_department_name IS NULL OR UPPER(d.Department_Name) = UPPER(p_department_name))
-        GROUP BY d.Department_Name
-    ) LOOP
-        DBMS_OUTPUT.PUT_LINE('Department: ' || ratio_rec.Department_Name ||
-                             ' | Employee Count: ' || ratio_rec.employee_count ||
-                             ' | Student Count: ' || ratio_rec.student_count ||
-                             ' | Employee-Student Ratio: ' || ratio_rec.emp_student_ratio);
-    END LOOP;
-
-EXCEPTION
-    WHEN NO_DATA_FOUND THEN
-        DBMS_OUTPUT.PUT_LINE('No records found for the given input.');
-    WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE('Error occurred: ' || SQLERRM);
-END;
-/
--- Execute procedure with user input
-ACCEPT department_name CHAR PROMPT 'Enter Department Name (leave blank for all departments): '
-
-BEGIN
-    calculate_ratio_for_department(
-        p_department_name => '&department_name'
-    );
-END;
-/
-
--- CALCULATE TOTAL STUDENTS
--- This script allows the user to input the department name to query the number of students and staff in the department
-SET SERVEROUTPUT ON SIZE UNLIMITED;
-
-CREATE OR REPLACE PROCEDURE calculate_department_totals (
-    p_department_name IN VARCHAR2 -- User input for Department Name
-) AS
-    v_total_students  NUMBER; 
-    v_total_employees NUMBER; 
 BEGIN
     
-    DBMS_OUTPUT.PUT_LINE('Department Name: ' || p_department_name);
+    DBMS_OUTPUT.PUT_LINE('Input Parameters:');
+    DBMS_OUTPUT.PUT_LINE('Semester Name: ' || p_semester_name);
+    DBMS_OUTPUT.PUT_LINE('Paper Name: ' || p_paper_name);
+    DBMS_OUTPUT.PUT_LINE('Passing Marks: ' || p_passing_marks);
 
-    BEGIN
-        SELECT COUNT(sc.Student_ID)
-        INTO v_total_students
-        FROM Department_info d
-        JOIN Student_counseling sc ON d.Department_ID = sc.Department_Admission
-        WHERE (p_department_name IS NULL OR UPPER(d.Department_Name) = UPPER(p_department_name));
+   
+    FOR rec IN (
+        SELECT sp.Student_ID, sp.Marks
+        FROM Student_performance sp
+        WHERE (p_semester_name IS NULL OR UPPER(sp.Semester_Name) = UPPER(p_semester_name))
+          AND (p_paper_name IS NULL OR UPPER(sp.Paper_Name) = UPPER(p_paper_name))
+          AND sp.Marks < p_passing_marks
+        ORDER BY sp.Marks ASC
+    ) LOOP
+        DBMS_OUTPUT.PUT_LINE('Failing Student ID: ' || rec.Student_ID);
+        DBMS_OUTPUT.PUT_LINE('Marks: ' || rec.Marks);
+        DBMS_OUTPUT.PUT_LINE(''); 
+    END LOOP;
 
-        SELECT COUNT(e.Employee_ID)
-        INTO v_total_employees
-        FROM Department_info d
-        JOIN Employee_info e ON d.Department_ID = e.Department_ID
-        WHERE (p_department_name IS NULL OR UPPER(d.Department_Name) = UPPER(p_department_name));
-
-        IF p_department_name IS NULL THEN
-            DBMS_OUTPUT.PUT_LINE('Total Students in All Departments: ' || v_total_students);
-            DBMS_OUTPUT.PUT_LINE('Total Employees in All Departments: ' || v_total_employees);
-        ELSE
-            DBMS_OUTPUT.PUT_LINE('Total Students in ' || p_department_name || ': ' || v_total_students);
-            DBMS_OUTPUT.PUT_LINE('Total Employees in ' || p_department_name || ': ' || v_total_employees);
-        END IF;
-
-    EXCEPTION
-        WHEN NO_DATA_FOUND THEN
-            DBMS_OUTPUT.PUT_LINE('No records found for the given input.');
-        WHEN OTHERS THEN
-            DBMS_OUTPUT.PUT_LINE('Error occurred: ' || SQLERRM);
-    END;
+    IF SQL%ROWCOUNT = 0 THEN
+        DBMS_OUTPUT.PUT_LINE('No failing students found for the given input.');
+    END IF;
 END;
 /
 
-ACCEPT department_name CHAR PROMPT 'Enter Department Name (leave blank for all departments): '
+ACCEPT semester_name CHAR PROMPT 'Enter Semester Name (leave blank if not filtering by Semester Name): '
+ACCEPT paper_name CHAR PROMPT 'Enter Paper Name (leave blank if not filtering by Paper Name): '
+ACCEPT passing_marks NUMBER PROMPT 'Enter Passing Marks: '
 
 BEGIN
-    calculate_department_totals(
-        p_department_name => '&department_name'
+    find_failing_students(
+        p_semester_name => '&semester_name',
+        p_paper_name => '&paper_name',
+        p_passing_marks => &passing_marks
     );
 END;
 /
 
-
--- DEPARTMENT GROWTH OVER TIME
-SELECT d.Department_ID,
-       TO_CHAR(e.DOJ, 'YYYY') AS Year,
-       COUNT(e.Employee_ID) AS Employee_Count,
-       COUNT(sc.Student_ID) AS Student_Count
-FROM Department_info d
-LEFT JOIN Employee_info e 
-    ON d.Department_ID = e.Department_ID  
-LEFT JOIN Student_counseling sc 
-    ON d.Department_ID = sc.Department_Choices  
-GROUP BY d.Department_ID, TO_CHAR(e.DOJ, 'YYYY')
-ORDER BY d.Department_ID, Year;
-
-
---STUDENT_COUNSELING_NEEDS_BY_DEPARTMENT
-SELECT 
-    d.Department_Name AS "Department Name",
-    COUNT(sc.Student_ID) AS "Number of Students"
-FROM 
-    Student_counseling sc
-JOIN 
-    Department_info d ON sc.Department_Admission = d.Department_ID
-GROUP BY 
-    d.Department_Name
-ORDER BY 
-    "Number of Students" DESC;
-
-
--- EMP_TENURE
--- Display average tenure of employees for each department (listed from logest to shortest)
-SET SERVEROUTPUT ON SIZE UNLIMITED;
-
-CREATE OR REPLACE PROCEDURE calculate_avg_tenure IS
-BEGIN
-    FOR rec IN (
-        SELECT d.Department_Name, 
-               AVG(MONTHS_BETWEEN(SYSDATE, e.DOJ) / 12) AS Average_Tenure_Years
-        FROM Employee_info e
-        JOIN Department_info d ON e.Department_ID = d.Department_ID
-        GROUP BY d.Department_Name
-        ORDER BY AVG(MONTHS_BETWEEN(SYSDATE, e.DOJ) / 12) DESC
-    ) LOOP
-        -- Display the results with formatted average tenure
-        DBMS_OUTPUT.PUT_LINE('Department Name: ' || rec.Department_Name || 
-                             ' - Average Tenure: ' || 
-                             TO_CHAR(rec.Average_Tenure_Years, 'FM999990.00') || ' years');
-    END LOOP;
-
-EXCEPTION
-    WHEN NO_DATA_FOUND THEN
-        DBMS_OUTPUT.PUT_LINE('No records found.');
-    WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE('Error occurred: ' || SQLERRM);
-END;
-/
-
--- Execute the procedure
-BEGIN
-    calculate_avg_tenure;
-END;
-/
-
-
--- QUERY AVERAGE MARKS
-
-//This script allows user to input the student ID, semester name or paper name to query the average marks of the student, semester or paper
+-- 3.1.2 Find average marks 
+-- This script allows user to input the student ID, semester name or paper name to query the average marks of the student, semester or paper
 SET SERVEROUTPUT ON SIZE UNLIMITED;
 
 CREATE OR REPLACE PROCEDURE find_average_marks (
@@ -1698,57 +1579,144 @@ BEGIN
 END;
 /
 
-
--- QUERY FAILING STUDENT
- -- This query allows the user to input the semester name, paper name, and passing marks to find the failing students
+-- 3.1.3 Find the number of employees and students in a department 
+-- This script allows the user to input the department name to query the number of students and staff in the department
 SET SERVEROUTPUT ON SIZE UNLIMITED;
 
-CREATE OR REPLACE PROCEDURE find_failing_students (
-    p_semester_name IN VARCHAR2,  
-    p_paper_name IN VARCHAR2,      
-    p_passing_marks IN NUMBER      
+CREATE OR REPLACE PROCEDURE calculate_department_totals (
+    p_department_name IN VARCHAR2 
 ) AS
+    v_total_students  NUMBER; 
+    v_total_employees NUMBER; 
 BEGIN
     
-    DBMS_OUTPUT.PUT_LINE('Input Parameters:');
-    DBMS_OUTPUT.PUT_LINE('Semester Name: ' || p_semester_name);
-    DBMS_OUTPUT.PUT_LINE('Paper Name: ' || p_paper_name);
-    DBMS_OUTPUT.PUT_LINE('Passing Marks: ' || p_passing_marks);
+    DBMS_OUTPUT.PUT_LINE('Department Name: ' || p_department_name);
 
-   
-    FOR rec IN (
-        SELECT sp.Student_ID, sp.Marks
-        FROM Student_performance sp
-        WHERE (p_semester_name IS NULL OR UPPER(sp.Semester_Name) = UPPER(p_semester_name))
-          AND (p_paper_name IS NULL OR UPPER(sp.Paper_Name) = UPPER(p_paper_name))
-          AND sp.Marks < p_passing_marks
-        ORDER BY sp.Marks ASC
-    ) LOOP
-        DBMS_OUTPUT.PUT_LINE('Failing Student ID: ' || rec.Student_ID);
-        DBMS_OUTPUT.PUT_LINE('Marks: ' || rec.Marks);
-        DBMS_OUTPUT.PUT_LINE(''); 
-    END LOOP;
+    BEGIN
+        SELECT COUNT(sc.Student_ID)
+        INTO v_total_students
+        FROM Department_info d
+        JOIN Student_counseling sc ON d.Department_ID = sc.Department_Admission
+        WHERE (p_department_name IS NULL OR UPPER(d.Department_Name) = UPPER(p_department_name));
 
-    IF SQL%ROWCOUNT = 0 THEN
-        DBMS_OUTPUT.PUT_LINE('No failing students found for the given input.');
-    END IF;
+        SELECT COUNT(e.Employee_ID)
+        INTO v_total_employees
+        FROM Department_info d
+        JOIN Employee_info e ON d.Department_ID = e.Department_ID
+        WHERE (p_department_name IS NULL OR UPPER(d.Department_Name) = UPPER(p_department_name));
+
+        IF p_department_name IS NULL THEN
+            DBMS_OUTPUT.PUT_LINE('Total Students in All Departments: ' || v_total_students);
+            DBMS_OUTPUT.PUT_LINE('Total Employees in All Departments: ' || v_total_employees);
+        ELSE
+            DBMS_OUTPUT.PUT_LINE('Total Students in ' || p_department_name || ': ' || v_total_students);
+            DBMS_OUTPUT.PUT_LINE('Total Employees in ' || p_department_name || ': ' || v_total_employees);
+        END IF;
+
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            DBMS_OUTPUT.PUT_LINE('No records found for the given input.');
+        WHEN OTHERS THEN
+            DBMS_OUTPUT.PUT_LINE('Error occurred: ' || SQLERRM);
+    END;
 END;
 /
 
-ACCEPT semester_name CHAR PROMPT 'Enter Semester Name (leave blank if not filtering by Semester Name): '
-ACCEPT paper_name CHAR PROMPT 'Enter Paper Name (leave blank if not filtering by Paper Name): '
-ACCEPT passing_marks NUMBER PROMPT 'Enter Passing Marks: '
+ACCEPT department_name CHAR PROMPT 'Enter Department Name (leave blank for all departments): '
 
 BEGIN
-    find_failing_students(
-        p_semester_name => '&semester_name',
-        p_paper_name => '&paper_name',
-        p_passing_marks => &passing_marks
+    calculate_department_totals(
+        p_department_name => '&department_name'
     );
 END;
 /
 
--- TOP10_DEPARTMENTAL
+-- 3.1.4 Find the average tenure of employees for each department 
+-- Display average tenure of employees for each department (listed from logest to shortest)
+SET SERVEROUTPUT ON SIZE UNLIMITED;
+
+CREATE OR REPLACE PROCEDURE calculate_avg_tenure IS
+BEGIN
+    FOR rec IN (
+        SELECT d.Department_Name, 
+               AVG(MONTHS_BETWEEN(SYSDATE, e.DOJ) / 12) AS Average_Tenure_Years
+        FROM Employee_info e
+        JOIN Department_info d ON e.Department_ID = d.Department_ID
+        GROUP BY d.Department_Name
+        ORDER BY AVG(MONTHS_BETWEEN(SYSDATE, e.DOJ) / 12) DESC
+    ) LOOP
+        -- Display the results with formatted average tenure
+        DBMS_OUTPUT.PUT_LINE('Department Name: ' || rec.Department_Name || 
+                             ' - Average Tenure: ' || 
+                             TO_CHAR(rec.Average_Tenure_Years, 'FM999990.00') || ' years');
+    END LOOP;
+
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        DBMS_OUTPUT.PUT_LINE('No records found.');
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Error occurred: ' || SQLERRM);
+END;
+/
+
+-- Execute the procedure
+BEGIN
+    calculate_avg_tenure;
+END;
+/
+
+
+-- 3.1.5 Find the ratio of employees and student for each department 
+-- allow user to input department name and get the student to employee ratio for each department
+SET SERVEROUTPUT ON SIZE UNLIMITED;
+
+CREATE OR REPLACE PROCEDURE calculate_ratio_for_department (
+    p_department_name IN VARCHAR2 -- User input for Department Name
+) AS
+BEGIN
+    -- Output input parameters for debugging
+    DBMS_OUTPUT.PUT_LINE('Input Parameters:');
+    DBMS_OUTPUT.PUT_LINE('Department Name: ' || p_department_name);
+
+    FOR ratio_rec IN (
+        SELECT d.Department_Name,
+               COUNT(e.Employee_ID) AS employee_count,
+               COUNT(sc.Student_ID) AS student_count,
+               CASE 
+                   WHEN COUNT(e.Employee_ID) = 0 THEN 0
+                   ELSE ROUND(COUNT(sc.Student_ID) / COUNT(e.Employee_ID), 2) 
+               END AS emp_student_ratio 
+        FROM Department_info d
+        LEFT JOIN Employee_info e ON d.Department_ID = e.Department_ID
+        LEFT JOIN Student_counseling sc ON d.Department_ID = sc.Department_Admission
+        WHERE (p_department_name IS NULL OR UPPER(d.Department_Name) = UPPER(p_department_name))
+        GROUP BY d.Department_Name
+    ) LOOP
+        DBMS_OUTPUT.PUT_LINE('Department: ' || ratio_rec.Department_Name ||
+                             ' | Employee Count: ' || ratio_rec.employee_count ||
+                             ' | Student Count: ' || ratio_rec.student_count ||
+                             ' | Employee-Student Ratio: ' || ratio_rec.emp_student_ratio);
+    END LOOP;
+
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        DBMS_OUTPUT.PUT_LINE('No records found for the given input.');
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Error occurred: ' || SQLERRM);
+END;
+/
+-- Execute procedure with user input
+ACCEPT department_name CHAR PROMPT 'Enter Department Name (leave blank for all departments): '
+
+BEGIN
+    calculate_ratio_for_department(
+        p_department_name => '&department_name'
+    );
+END;
+/
+
+
+-- 3.1.6 Find top 10 department 
 SET SERVEROUTPUT ON SIZE UNLIMITED;
 
 CREATE OR REPLACE PROCEDURE Display_Top_10_Departments IS
@@ -1781,3 +1749,76 @@ BEGIN
     Display_Top_10_Departments;
 END;
 /
+
+
+-- 3.1.7 Find department growth over time 
+
+SET SERVEROUTPUT ON SIZE UNLIMITED;
+
+CREATE OR REPLACE PROCEDURE find_department_growth_over_time IS
+BEGIN
+    FOR rec IN (
+        SELECT d.Department_Name,
+               TO_CHAR(e.DOJ, 'YYYY') AS Year,
+               COUNT(DISTINCT e.Employee_ID) AS Employee_Count,
+               COUNT(DISTINCT sc.Student_ID) AS Student_Count
+        FROM Department_info d
+        LEFT JOIN Employee_info e ON d.Department_ID = e.Department_ID  
+        LEFT JOIN Student_counseling sc ON d.Department_ID = sc.Department_Choices  
+        GROUP BY d.Department_Name, TO_CHAR(e.DOJ, 'YYYY')
+        ORDER BY d.Department_Name, Year
+    ) LOOP
+        DBMS_OUTPUT.PUT_LINE('Department: ' || rec.Department_Name ||
+                             ' | Year: ' || rec.Year ||
+                             ' | Employee Count: ' || rec.Employee_Count ||
+                             ' | Student Count: ' || rec.Student_Count);
+    END LOOP;
+
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        DBMS_OUTPUT.PUT_LINE('No records found.');
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Error occurred: ' || SQLERRM);
+END;
+/
+
+BEGIN
+    find_department_growth_over_time;
+END;
+/
+
+
+
+-- 3.1.8 Find student counseling needs by department 
+SET SERVEROUTPUT ON SIZE UNLIMITED;
+
+CREATE OR REPLACE PROCEDURE find_student_counseling_needs IS
+BEGIN
+    FOR rec IN (
+        SELECT d.Department_Name AS Department_Name,
+               COUNT(sc.Student_ID) AS Number_of_Students
+        FROM Student_counseling sc
+        JOIN Department_info d ON sc.Department_Admission = d.Department_ID
+        GROUP BY d.Department_Name
+        ORDER BY Number_of_Students DESC
+    ) LOOP
+        DBMS_OUTPUT.PUT_LINE('Department: ' || rec.Department_Name || 
+                             ' | Number of Students: ' || rec.Number_of_Students);
+    END LOOP;
+
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        DBMS_OUTPUT.PUT_LINE('No records found.');
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Error occurred: ' || SQLERRM);
+END;
+/
+BEGIN
+    find_student_counseling_needs;
+END;
+/
+
+
+
+
+
